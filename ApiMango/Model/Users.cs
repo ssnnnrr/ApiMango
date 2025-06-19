@@ -18,7 +18,7 @@ public class User
     public string PasswordHash { get; set; }
 
     [Required]
-    public string Token { get; set; }
+    public string? Token { get; set; }
 
     public DateTime? TokenExpiry { get; set; }
 

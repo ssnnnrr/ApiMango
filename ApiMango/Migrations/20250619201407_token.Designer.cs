@@ -12,8 +12,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace ApiMango.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20250619190704_ыусщт")]
-    partial class ыусщт
+    [Migration("20250619201407_token")]
+    partial class token
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)

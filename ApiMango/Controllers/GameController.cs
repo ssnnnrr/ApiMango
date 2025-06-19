@@ -14,10 +14,8 @@ using System.Collections.Generic;
 namespace ApiMango.Controllers
 {
     #region DTOs
-    // DTO для запроса, требующего токен
     public class TokenRequest { public string Token { get; set; } }
 
-    // DTO для ответа с прогрессом игрока
     public class PlayerProgressResponse
     {
         public int TotalStars { get; set; }
@@ -41,7 +39,6 @@ namespace ApiMango.Controllers
         public int Score { get; set; }
     }
 
-    // DTO для ответа таблицы лидеров
     public class LeaderboardEntryResponse
     {
         public string Login { get; set; }
@@ -62,7 +59,8 @@ namespace ApiMango.Controllers
             _configuration = configuration;
         }
 
-        private int? ValidateToken(string token)
+        // --- ИЗМЕНЕНИЕ 1: Метод теперь правильно возвращает string? ---
+        private string? ValidateAndGetLogin(string token)
         {
             if (string.IsNullOrEmpty(token)) return null;
             try
@@ -79,23 +77,29 @@ namespace ApiMango.Controllers
                 }, out SecurityToken validatedToken);
 
                 var jwtToken = (JwtSecurityToken)validatedToken;
-                return int.Parse(jwtToken.Claims.First(x => x.Type == "id").Value);
+                // Теперь мы просто возвращаем значение claim "login" как строку.
+                return jwtToken.Claims.First(x => x.Type == "login").Value;
             }
-            catch { return null; }
+            catch
+            {
+                return null;
+            }
         }
 
         [HttpPost("get-progress")]
         public async Task<IActionResult> GetPlayerProgress([FromBody] TokenRequest request)
         {
-            var userId = ValidateToken(request.Token);
-            if (userId == null) return Unauthorized("Invalid token");
+            var userLogin = ValidateAndGetLogin(request.Token);
+            if (userLogin == null) return Unauthorized("Invalid token");
 
+            // Теперь здесь нет ошибки: мы сравниваем string == string
             var user = await _context.Users
                 .Include(u => u.LevelProgresses)
-                .FirstOrDefaultAsync(u => u.Id == userId);
+                .FirstOrDefaultAsync(u => u.Login == userLogin);
 
             if (user == null) return NotFound("User not found");
 
+            // ... остальная логика без изменений ...
             var progresses = user.LevelProgresses.Select(lp => new LevelProgressDto
             {
                 LevelBuildIndex = lp.LevelBuildIndex,
@@ -113,14 +117,20 @@ namespace ApiMango.Controllers
             return Ok(response);
         }
 
+        // --- ИЗМЕНЕНИЕ 2: Метод SavePlayerProgress полностью исправлен и согласован с GetPlayerProgress ---
         [HttpPost("save-progress")]
         public async Task<IActionResult> SavePlayerProgress([FromBody] SaveProgressRequest request)
         {
-            var userId = ValidateToken(request.Token);
-            if (userId == null) return Unauthorized("Invalid token");
+            // Используем тот же метод, что и выше
+            var userLogin = ValidateAndGetLogin(request.Token);
+            if (userLogin == null) return Unauthorized("Invalid token");
 
-            var user = await _context.Users.FindAsync(userId.Value);
+            // Находим пользователя по логину, а не по ID
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Login == userLogin);
             if (user == null) return NotFound("User not found");
+
+            // Теперь, когда у нас есть пользователь, мы можем использовать его ID
+            var userId = user.Id;
 
             var existingProgress = await _context.LevelProgresses
                 .FirstOrDefaultAsync(lp => lp.UserId == userId && lp.LevelBuildIndex == request.LevelBuildIndex);
@@ -129,7 +139,7 @@ namespace ApiMango.Controllers
             {
                 _context.LevelProgresses.Add(new LevelProgress
                 {
-                    UserId = userId.Value,
+                    UserId = userId, // Используем полученный ID
                     LevelBuildIndex = request.LevelBuildIndex,
                     StarsCollected = request.StarsCollected,
                     Score = request.Score
@@ -137,7 +147,6 @@ namespace ApiMango.Controllers
             }
             else
             {
-                // Обновляем, только если результат лучше (больше звезд или очков)
                 if (request.StarsCollected > existingProgress.StarsCollected ||
                    (request.StarsCollected == existingProgress.StarsCollected && request.Score > existingProgress.Score))
                 {
@@ -148,7 +157,6 @@ namespace ApiMango.Controllers
 
             await _context.SaveChangesAsync();
 
-            // Пересчитываем TotalScore пользователя, суммируя лучшие результаты по каждому уровню
             user.TotalScore = await _context.LevelProgresses
                                     .Where(lp => lp.UserId == userId)
                                     .SumAsync(lp => lp.Score);
@@ -161,14 +169,11 @@ namespace ApiMango.Controllers
         [HttpGet("leaderboard")]
         public async Task<IActionResult> GetLeaderboard()
         {
+            // ... код без изменений ...
             var leaderboard = await _context.Users
                 .OrderByDescending(u => u.TotalScore)
-                .Take(3) // Топ-3
-                .Select(u => new LeaderboardEntryResponse
-                {
-                    Login = u.Login,
-                    TotalScore = u.TotalScore
-                })
+                .Take(3)
+                .Select(u => new LeaderboardEntryResponse { Login = u.Login, TotalScore = u.TotalScore })
                 .ToListAsync();
 
             return Ok(leaderboard);

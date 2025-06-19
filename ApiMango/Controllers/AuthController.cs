@@ -9,7 +9,6 @@ using System.Security.Claims;
 using ApiMango.Request;
 using Microsoft.Extensions.Configuration;
 using System.Threading.Tasks;
-using Microsoft.AspNetCore.Identity.Data;
 
 namespace ApiMango.Controllers
 {
@@ -29,7 +28,7 @@ namespace ApiMango.Controllers
         [HttpPost("login")]
         public IActionResult Login([FromBody] LoginRequest request)
         {
-            var user = _context.Users.FirstOrDefault(u => u.Login == request.Email && u.PasswordHash == request.Password);
+            var user = _context.Users.FirstOrDefault(u => u.Login == request.Login && u.PasswordHash == request.Password);
 
             if (user == null)
             {
@@ -39,43 +38,42 @@ namespace ApiMango.Controllers
             return Ok(new { token = user.Token, totalScore = user.TotalScore });
         }
 
-
+        // ApiMango/Controllers/AuthController.cs
         [HttpPost("register")]
-        public async Task<IActionResult> Register([FromBody] Request.RegisterRequest request)
+        public async Task<IActionResult> Register([FromBody] RegisterRequest request)
         {
             if (_context.Users.Any(u => u.Login == request.Login))
                 return BadRequest("Username already exists");
 
-            var token = GenerateJwtTokenForNewUser(request.Login);
+            // 1. Сначала генерируем токен, используя ЛОГИН, так как ID еще нет.
+            var token = GenerateJwtTokenWithLogin(request.Login);
 
+            // 2. Создаем пользователя СРАЗУ с токеном.
             var user = new User
             {
                 Login = request.Login,
-                PasswordHash = request.Password, 
+                PasswordHash = request.Password,
                 TotalScore = 0,
-                Token = token,
-                TokenExpiry = DateTime.UtcNow.AddYears(1) 
+                Token = token, // Присваиваем токен здесь
+                TokenExpiry = DateTime.UtcNow.AddYears(1)
             };
 
+            // 3. Добавляем и сохраняем все за ОДИН раз.
             _context.Users.Add(user);
-
             await _context.SaveChangesAsync();
 
             return Ok(new { token, totalScore = user.TotalScore });
         }
-
-
-        private string GenerateJwtTokenForNewUser(string login)
+        
+        private string GenerateJwtTokenWithLogin(string login)
         {
             var tokenHandler = new JwtSecurityTokenHandler();
             var key = Encoding.ASCII.GetBytes(_configuration["Jwt:Key"]);
 
             var tokenDescriptor = new SecurityTokenDescriptor
             {
-                Subject = new ClaimsIdentity(new[] {
-            new Claim("login", login),
-            new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()) 
-        }),
+                // Кладем claim с типом "login"
+                Subject = new ClaimsIdentity(new[] { new Claim("login", login) }),
                 Expires = DateTime.UtcNow.AddYears(1),
                 SigningCredentials = new SigningCredentials(
                     new SymmetricSecurityKey(key),
