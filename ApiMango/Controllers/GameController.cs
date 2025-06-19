@@ -30,7 +30,6 @@ namespace ApiMango.Controllers
         public int Score { get; set; }
     }
 
-    // DTO для запроса на сохранение прогресса
     public class SaveProgressRequest
     {
         public string Token { get; set; }
@@ -59,7 +58,6 @@ namespace ApiMango.Controllers
             _configuration = configuration;
         }
 
-        // --- ИЗМЕНЕНИЕ 1: Метод теперь правильно возвращает string? ---
         private string? ValidateAndGetLogin(string token)
         {
             if (string.IsNullOrEmpty(token)) return null;
@@ -77,7 +75,6 @@ namespace ApiMango.Controllers
                 }, out SecurityToken validatedToken);
 
                 var jwtToken = (JwtSecurityToken)validatedToken;
-                // Теперь мы просто возвращаем значение claim "login" как строку.
                 return jwtToken.Claims.First(x => x.Type == "login").Value;
             }
             catch
@@ -92,14 +89,12 @@ namespace ApiMango.Controllers
             var userLogin = ValidateAndGetLogin(request.Token);
             if (userLogin == null) return Unauthorized("Invalid token");
 
-            // Теперь здесь нет ошибки: мы сравниваем string == string
             var user = await _context.Users
                 .Include(u => u.LevelProgresses)
                 .FirstOrDefaultAsync(u => u.Login == userLogin);
 
             if (user == null) return NotFound("User not found");
 
-            // ... остальная логика без изменений ...
             var progresses = user.LevelProgresses.Select(lp => new LevelProgressDto
             {
                 LevelBuildIndex = lp.LevelBuildIndex,
@@ -117,19 +112,15 @@ namespace ApiMango.Controllers
             return Ok(response);
         }
 
-        // --- ИЗМЕНЕНИЕ 2: Метод SavePlayerProgress полностью исправлен и согласован с GetPlayerProgress ---
         [HttpPost("save-progress")]
         public async Task<IActionResult> SavePlayerProgress([FromBody] SaveProgressRequest request)
         {
-            // Используем тот же метод, что и выше
             var userLogin = ValidateAndGetLogin(request.Token);
             if (userLogin == null) return Unauthorized("Invalid token");
 
-            // Находим пользователя по логину, а не по ID
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Login == userLogin);
             if (user == null) return NotFound("User not found");
 
-            // Теперь, когда у нас есть пользователь, мы можем использовать его ID
             var userId = user.Id;
 
             var existingProgress = await _context.LevelProgresses
@@ -139,7 +130,7 @@ namespace ApiMango.Controllers
             {
                 _context.LevelProgresses.Add(new LevelProgress
                 {
-                    UserId = userId, // Используем полученный ID
+                    UserId = userId, 
                     LevelBuildIndex = request.LevelBuildIndex,
                     StarsCollected = request.StarsCollected,
                     Score = request.Score
@@ -169,7 +160,6 @@ namespace ApiMango.Controllers
         [HttpGet("leaderboard")]
         public async Task<IActionResult> GetLeaderboard()
         {
-            // ... код без изменений ...
             var leaderboard = await _context.Users
                 .OrderByDescending(u => u.TotalScore)
                 .Take(3)
