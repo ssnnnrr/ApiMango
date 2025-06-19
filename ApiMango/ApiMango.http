@@ -1,0 +1,6 @@
+@ApiMango_HostAddress = http://localhost:5110
+
+GET {{ApiMango_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
