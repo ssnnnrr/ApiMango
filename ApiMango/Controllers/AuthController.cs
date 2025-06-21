@@ -38,27 +38,23 @@ namespace ApiMango.Controllers
             return Ok(new { token = user.Token, totalScore = user.TotalScore });
         }
 
-        // ApiMango/Controllers/AuthController.cs
         [HttpPost("register")]
         public async Task<IActionResult> Register([FromBody] RegisterRequest request)
         {
             if (_context.Users.Any(u => u.Login == request.Login))
                 return BadRequest("Username already exists");
 
-            // 1. Сначала генерируем токен, используя ЛОГИН, так как ID еще нет.
             var token = GenerateJwtTokenWithLogin(request.Login);
 
-            // 2. Создаем пользователя СРАЗУ с токеном.
             var user = new User
             {
                 Login = request.Login,
                 PasswordHash = request.Password,
                 TotalScore = 0,
-                Token = token, // Присваиваем токен здесь
+                Token = token,
                 TokenExpiry = DateTime.UtcNow.AddYears(1)
             };
 
-            // 3. Добавляем и сохраняем все за ОДИН раз.
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
 
@@ -72,7 +68,6 @@ namespace ApiMango.Controllers
 
             var tokenDescriptor = new SecurityTokenDescriptor
             {
-                // Кладем claim с типом "login"
                 Subject = new ClaimsIdentity(new[] { new Claim("login", login) }),
                 Expires = DateTime.UtcNow.AddYears(1),
                 SigningCredentials = new SigningCredentials(

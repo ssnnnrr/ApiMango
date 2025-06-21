@@ -112,6 +112,8 @@ namespace ApiMango.Controllers
             return Ok(response);
         }
 
+        // GameController.cs (сервер)
+
         [HttpPost("save-progress")]
         public async Task<IActionResult> SavePlayerProgress([FromBody] SaveProgressRequest request)
         {
@@ -122,37 +124,42 @@ namespace ApiMango.Controllers
             if (user == null) return NotFound("User not found");
 
             var userId = user.Id;
-
             var existingProgress = await _context.LevelProgresses
                 .FirstOrDefaultAsync(lp => lp.UserId == userId && lp.LevelBuildIndex == request.LevelBuildIndex);
+
+            bool hasProgressChanged = false;
 
             if (existingProgress == null)
             {
                 _context.LevelProgresses.Add(new LevelProgress
                 {
-                    UserId = userId, 
+                    UserId = userId,
                     LevelBuildIndex = request.LevelBuildIndex,
                     StarsCollected = request.StarsCollected,
                     Score = request.Score
                 });
+                hasProgressChanged = true;
             }
             else
             {
-                if (request.StarsCollected > existingProgress.StarsCollected ||
-                   (request.StarsCollected == existingProgress.StarsCollected && request.Score > existingProgress.Score))
+                if (request.Score > existingProgress.Score)
                 {
-                    existingProgress.StarsCollected = request.StarsCollected;
                     existingProgress.Score = request.Score;
+                    existingProgress.StarsCollected = request.StarsCollected;
+                    hasProgressChanged = true;
                 }
             }
 
-            await _context.SaveChangesAsync();
+            if (hasProgressChanged)
+            {
+                await _context.SaveChangesAsync();
 
-            user.TotalScore = await _context.LevelProgresses
-                                    .Where(lp => lp.UserId == userId)
-                                    .SumAsync(lp => lp.Score);
+                user.TotalScore = await _context.LevelProgresses
+                                        .Where(lp => lp.UserId == userId)
+                                        .SumAsync(lp => lp.Score);
 
-            await _context.SaveChangesAsync();
+                await _context.SaveChangesAsync();
+            }
 
             return Ok(new { success = true, totalScore = user.TotalScore });
         }
